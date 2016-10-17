@@ -1,6 +1,5 @@
 import tkinter as tk
-#from famenu import famenu_config
-import famenu_config
+from famenu import famenu_config
 import sys
 import re
 import subprocess
