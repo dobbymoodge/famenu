@@ -274,7 +274,7 @@ class FaCommandAction:
 
 def parse_menu_item_action(action):
     if action[0] == 'exec':
-        return FaExecAction(action[1])
+        return FaExecAction(action[1:])
     elif action[0] == 'menu':
         return FaMenuAction(action[1])
     else:
