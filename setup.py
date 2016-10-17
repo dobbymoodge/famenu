@@ -40,7 +40,7 @@ setup(
         'Topic :: Utilities',
         'Topic :: Desktop Environment',
 
-        'License :: OSI Approved :: MIT License', # TODO: pick the right one
+        'License :: OSI Approved :: MIT License',  # TODO: pick the right one
 
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
