@@ -21,14 +21,6 @@ MODIFIERS = {
 
 IGNORED_MODIFIERS = [X.Mod2Mask, X.LockMask]
 
-COLON_MASK = r'|colon|'
-
-def mask_string_colons(s):
-    return s.replace(':', COLON_MASK)
-
-def unmask_string_colons(s):
-    return s.replace(COLON_MASK, ':')
-
 def powerset(iterable):
     """C{powerset([1,2,3])} --> C{() (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)}
 
