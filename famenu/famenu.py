@@ -253,7 +253,7 @@ class FaExecAction:
         self.exec_command = exec_command
 
     def run(self, *args):
-        subprocess.Popen(self.exec_command)
+        subprocess.call(self.exec_command)
         return True
 
 class FaMenuAction:
