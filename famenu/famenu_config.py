@@ -6,34 +6,17 @@ except ImportError:
     from io import StringIO
 import re
 
-config_string = """
-[config]
-font = Mono 12
-
-[main]
-menu_hot_key = <Mod4>z
-x&: xterm = exec "xterm"
-r&: Run dialog = exec gmrun
-f&: Firefox = exec firefox
-c&: Google Chrome = exec google-chrome
-k&: KeepassX = exec keepassx
-d&: DateTimeMenu = menu "DateTimeMenu"
-o&: Move CLIPBOARD to PRIMARY selection = exec
-    bash -c "/usr/bin/xclip -o -selection clipboard | /usr/bin/xclip -i -selection primary"
-p&: Move PRIMARY to CLIPBOARD selection = exec
-    bash -c "/usr/bin/xclip -o -selection primary | /usr/bin/xclip -i -selection clipboard"
-q&: quit = exit
-"""
-
 def split_key_value_line(line):
-    chunks = shlex.split(line)
+    chunks = shlex.split(line, True)
+    if len(chunks) == 0:
+        return None, None
     div = chunks.index('=') #TODO: catch ValueError for missing '=' in main init code
     key = ' '.join(chunks[:div])
     value = chunks[div + 1:]
     return key, value
 
 def split_value_line(line):
-    chunks = shlex.split(line.strip())
+    chunks = shlex.split(line.strip(), True)
     return chunks
 
 def parse_config_file_tokens(cfgfile):
@@ -48,7 +31,8 @@ def parse_config_file_tokens(cfgfile):
                     value += split_value_line(line)
                 continue
             else:
-                yield ('value', value)
+                if not value == None:
+                    yield ('value', value)
         last_tok_type = ''
         line = line.strip()
         if len(line) > 0:
@@ -60,7 +44,8 @@ def parse_config_file_tokens(cfgfile):
                     yield ('cfg_section', line[1:-1])
             else:
                 key, value = split_key_value_line(line)
-                yield ('key', key)
+                if not key == None:
+                    yield ('key', key)
                 last_tok_type = 'value'
 
 def parse_config_filestream(cfgfile):
