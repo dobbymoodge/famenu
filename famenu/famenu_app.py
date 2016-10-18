@@ -265,7 +265,7 @@ class FaExecAction:
         self.exec_command = exec_command
 
     def run(self, *args):
-        subprocess.call(self.exec_command)
+        subprocess.Popen(self.exec_command)
         return True
 
 
