@@ -1,6 +1,7 @@
 import tkinter as tk
 from famenu import famenu_config
 import sys
+from os import environ, setpgrp
 import re
 import subprocess
 from Xlib.display import Display
@@ -18,6 +19,7 @@ MODIFIERS = {
 
 IGNORED_MODIFIERS = [X.Mod2Mask, X.LockMask]
 
+HOME_DIR = environ['HOME']
 
 def powerset(iterable):
     """C{powerset([1,2,3])} --> C{() (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)}
@@ -265,7 +267,7 @@ class FaExecAction:
         self.exec_command = exec_command
 
     def run(self, *args):
-        subprocess.Popen(self.exec_command)
+        subprocess.Popen(self.exec_command, cwd=HOME_DIR, preexec_fn=setpgrp)
         return True
 
 
