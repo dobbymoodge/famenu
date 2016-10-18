@@ -1,13 +1,14 @@
 import tkinter as tk
 from famenu import famenu_config
 import sys
-from os import environ, setpgrp
+from os import environ, setpgrp, path
 import re
 import subprocess
 from Xlib.display import Display
 from Xlib import X, XK
 from functools import reduce
 from itertools import chain, combinations
+import argparse
 
 MODIFIERS = {
     'mod1': X.Mod1Mask,
@@ -19,7 +20,18 @@ MODIFIERS = {
 
 IGNORED_MODIFIERS = [X.Mod2Mask, X.LockMask]
 
-HOME_DIR = environ['HOME']
+HOME_DIR = environ.get('HOME', path.realpath(path.curdir))
+
+
+XDG_CONFIG_DIR = environ.get('XDG_CONFIG_HOME',
+                             path.join(HOME_DIR, '.config'))
+
+STD_CFG_FILENAME='famenu.cfg'
+
+STANDARD_CONFIG_FILES = [
+    path.join(XDG_CONFIG_DIR, STD_CFG_FILENAME),
+    path.join(HOME_DIR, STD_CFG_FILENAME)
+    ]
 
 def powerset(iterable):
     """C{powerset([1,2,3])} --> C{() (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)}
@@ -308,9 +320,31 @@ class FaMenuItem:
         return "[item_name: %s, hot_key: %s, hot_key_index: %d, action: %s]" % (self.item_name, self.hot_key, self.hot_key_index, self.action)
 
 
+def cmdline_options(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', type=argparse.FileType('r'), help='Alternate config file')
+    return parser.parse_args(args)
+
+
+def standard_config_file():
+    for scfile in STANDARD_CONFIG_FILES:
+        try:
+            return famenu_config.load(scfile)
+        except IOError:
+            sys.stderr.write("Couldn't load standard config file %s.\n" % scfile)
+    sys.stderr.write("No configuration file could be loaded.\n")
+    sys.exit(1)
+
+
 def main(args=None):
+    if args is None:
+        args = sys.argv[1:]
     menus = {}
-    config = famenu_config.parse_config_file('menu_config.ini')
+    options = cmdline_options(args)
+    if options.config is not None:
+        config = famenu_config.load(options.config)
+    else:
+        config = standard_config_file()
     for section, settings in config.items():
         if section == 'config':
             continue

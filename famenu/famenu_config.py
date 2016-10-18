@@ -78,6 +78,14 @@ def parse_config_filestream(cfgfile):
     return config
 
 
-def parse_config_file(cfg_filename):
-    cf = open(cfg_filename, 'r')
+def loads(cfg_string):
+    cfg_sio = StringIO(cfg_string)
+    return parse_config_filestream(cfg_sio)
+
+
+def load(cfg_file):
+    if isinstance(cfg_file, str):
+        cf = open(cfg_file, 'r')
+    else:
+        cf = cfg_file
     return parse_config_filestream(cf)
