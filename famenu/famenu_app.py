@@ -9,6 +9,7 @@ from Xlib import X, XK
 from functools import reduce
 from itertools import chain, combinations
 import argparse
+import gc
 
 MODIFIERS = {
     'mod1': X.Mod1Mask,
@@ -73,7 +74,7 @@ def parse_modifier_mask(mask_str):
     return modifiers, hotkey
 
 
-class FaButton(tk.Label):
+class Button(tk.Label):
     def __init__(self, parent, menu_item, root, app, *args, **kwargs):
         tk.Label.__init__(self, parent, text=menu_item.item_name,
                           anchor="w", justify=tk.LEFT,
@@ -87,7 +88,7 @@ class FaButton(tk.Label):
 
     def on_click(self, event):
         self.menu_item.action.run(self.app)
-        self.app.do_withdraw()
+        self.app.withdraw()
 
     def on_key(self, event):
         if (
@@ -96,22 +97,70 @@ class FaButton(tk.Label):
                 event.keysym == "Return"):
             return self.menu_item.action.run(self.app)
 
+def load_menus(options):
+    menus = {}
+    if options.config is not None:
+        config = famenu_config.load(options.config)
+    else:
+        config = standard_config_file()
+    for section, settings in config.items():
+        if section == 'config':
+            continue
+        menus[section] = Menu(section, settings)
+    return menus, config['config']
 
-class FaMenuApp():
-    def __init__(self, config, menus):
-        self.menus = menus
+
+class App():
+    def __init__(self, options):
+        self.options = options
+        self.reload_app = True
+        self.xroot = None
+        self.dpy = None
+        self.menus, self.config = load_menus(self.options)
+        self.create_menus()
+        self.running = False
+
+    def init_x_root(self):
+        if self.dpy is None:
+            self.dpy = Display()
+        if self.xroot is None:
+            self.xroot = self.dpy.screen().root
+
+    def create_menus(self):
         self.keycode_to_char = {}
         self.menu_hot_keys = {}
         self.root = tk.Tk()
-        self.menu_font = config['font']
-        self.xroot = None
-        self.dpy = None
+        self.menu_font = self.config['font']
+        self.init_x_root()
         self.root.bind("<Key>", self.on_key)
         self.buttons = []
         for menu_name, fa_menu in self.menus.items():
             self.add_menu(menu_name, fa_menu)
         self.root.config()
-        self.running = False
+
+    def reload_menus(self):
+        self.reload_app = True
+        self.withdraw()
+        self.xroot.destroy()
+        self.dpy.close()
+        self.menu_hot_keys = None
+        self.root = None
+        self.menu_font = None
+        self.buttons = None
+        self.xroot = None
+        self.dpy = None
+        gc.collect()
+        self.menus, self.config = load_menus(self.options)
+        self.create_menus()
+
+    def key_spec_to_keycode_modifier_mask(self, key_spec):
+        modifiers, key = parse_modifier_mask(key_spec)
+        keysym = XK.string_to_keysym(key)
+        keycode = self.dpy.keysym_to_keycode(keysym)
+        if keycode not in self.keycode_to_char.keys():
+            self.keycode_to_char[keycode] = key
+        modifier_mask = reduce(lambda x, y: x | y, modifiers, 0)
+        return key, keycode, modifier_mask
 
     def add_menu(self, menu_name, fa_menu):
         max_width = max((len(item.item_name) for item in fa_menu.menu_content))
@@ -123,7 +172,7 @@ class FaMenuApp():
                               justify=tk.LEFT)
         menu_label.pack(fill="y")
         for menu_item in fa_menu.menu_content:
-            jb = FaButton(menu_frame, menu_item, self.root, self,
+            jb = Button(menu_frame, menu_item, self.root, self,
                           font=self.menu_font, borderwidth=2,
                           relief=tk.RAISED, width=max_width)
             if menu_item.hot_key is not None:
@@ -150,12 +199,12 @@ class FaMenuApp():
             elif event.keysym == "Return" or event.keysym == "space":
                 run = self.menus[self.menu_name].button().on_key
             elif event.keysym == "Escape":
-                self.do_withdraw()
+                self.withdraw()
         if run is not None:
             if run(event):
-                self.do_withdraw()
+                self.withdraw()
 
-    def do_withdraw(self):
+    def withdraw(self):
         self.menus[self.menu_name].menu_frame.pack_forget()
         self.root.withdraw()
         self.root.quit()
@@ -180,7 +229,7 @@ class FaMenuApp():
             self.hot_keys = menu.hot_keys
 
     def do_loop(self):
-        while True:
+        while not self.reload_app:
             ev = self.xroot.display.next_event()
             if ev.type == X.KeyPress:
                 key = self.keycode_to_char.get(ev.detail)
@@ -193,27 +242,19 @@ class FaMenuApp():
                     self.root.mainloop()
 
     def run(self):
+        self.reload_app = False
         self.do_loop()
 
     def bind_key(self, key_spec):
-        modifiers, key = parse_modifier_mask(key_spec)
-        if self.dpy is None:
-            self.dpy = Display()
-        if self.xroot is None:
-            self.xroot = self.dpy.screen().root
-        keysym = XK.string_to_keysym(key)
-        keycode = self.dpy.keysym_to_keycode(keysym)
-        if keycode not in self.keycode_to_char.keys():
-            self.keycode_to_char[keycode] = key
-        modifier_mask = reduce(lambda x, y: x | y, modifiers, 0)
         self.xroot.change_attributes(event_mask=X.KeyPressMask)
+        key, keycode, modifier_mask = self.key_spec_to_keycode_modifier_mask(key_spec)
         states = []
         for ignored in powerset(IGNORED_MODIFIERS):
             modmask = reduce(lambda x, y: x | y, ignored, 0)
             modmask |= modifier_mask
             states.append(modmask)
             self.xroot.grab_key(keycode, modmask, 1,
-                                X.GrabModeAsync, X.GrabModeAsync)
+                                  X.GrabModeAsync, X.GrabModeAsync)
         return key, states
 
 
@@ -223,11 +264,11 @@ def parse_menu_content(menu_content):
         if item_name == 'menu_hot_key':
             menu_content[item_name] = action[0]
             continue
-        menu_items.append(FaMenuItem(item_name, action))
+        menu_items.append(Item(item_name, action))
     return menu_items
 
 
-class FaMenu:
+class Menu:
     def __init__(self, menu_name, menu_content):
         self.menu_name = menu_name
         self.menu_content = parse_menu_content(menu_content)
@@ -273,9 +314,8 @@ def parse_menu_item_name(item_name):
     return new_name, hot_key, hot_key_index
 
 
-class FaExecAction:
+class ExecAction:
     def __init__(self, exec_command):
-        # self.exec_command = shlex.split(exec_command[4:].strip())
         self.exec_command = exec_command
 
     def run(self, *args):
@@ -283,7 +323,7 @@ class FaExecAction:
         return True
 
 
-class FaMenuAction:
+class MenuAction:
     def __init__(self, menu_name):
         self.menu_name = menu_name.strip().strip('"\'')
 
@@ -292,25 +332,31 @@ class FaMenuAction:
         return False
 
 
-class FaCommandAction:
+class CommandAction:
     def __init__(self, command):
-        self.commands = {"exit": self.do_exit}
+        self.commands = {
+            "exit": self.do_exit,
+            "reload": self.reload_app,
+        }
         self.run = self.commands[command.lower()]
 
     def do_exit(self, *args):
         sys.exit(0)
 
+    def reload_app(self, app, *args):
+        app.reload_menus()
+
 
 def parse_menu_item_action(action):
     if action[0] == 'exec':
-        return FaExecAction(action[1:])
+        return ExecAction(action[1:])
     elif action[0] == 'menu':
-        return FaMenuAction(action[1])
+        return MenuAction(action[1])
     else:
-        return FaCommandAction(action[0])
+        return CommandAction(action[0])
 
 
-class FaMenuItem:
+class Item:
     def __init__(self, item_name, action):
         self.item_name, self.hot_key, self.hot_key_index = parse_menu_item_name(item_name)
         self.action = parse_menu_item_action(action)
@@ -339,20 +385,12 @@ def standard_config_file():
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
-    menus = {}
     options = cmdline_options(args)
-    if options.config is not None:
-        config = famenu_config.load(options.config)
-    else:
-        config = standard_config_file()
-    for section, settings in config.items():
-        if section == 'config':
-            continue
-        menus[section] = FaMenu(section, settings)
 
-    app = FaMenuApp(config['config'], menus)
+    app = App(options)
 
-    app.run()
+    while app.reload_app:
+        app.run()
 
 
 if __name__ == '__main__':
