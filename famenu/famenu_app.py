@@ -10,6 +10,7 @@ from functools import reduce
 from itertools import chain, combinations
 import argparse
 import gc
+import signal
 
 MODIFIERS = {
     'mod1': X.Mod1Mask,
@@ -319,7 +320,8 @@ class ExecAction:
         self.exec_command = exec_command
 
     def run(self, *args):
-        subprocess.Popen(self.exec_command, cwd=HOME_DIR, preexec_fn=setpgrp)
+        subprocess.Popen(
+            self.exec_command, cwd=HOME_DIR, preexec_fn=setpgrp)
         return True
 
 
@@ -389,6 +391,8 @@ def main(args=None):
 
     app = App(options)
 
+    # Don't generate a bunch of defunct processes
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
     while app.reload_app:
         app.run()
 
